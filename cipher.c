@@ -19,35 +19,39 @@
 #define MAX_INPUT_SIZE 10000
 #define MAX_PID_NAME_LEN 256
 #define READ_WRITE_BUFFER_SIZE 4096
+#define MAX_MARK_COUNT 128
+#define MAX_MARK_NAME_LEN 64
+#define MARKS_FILE_NAME ".cipher_marks"
 
-char* prompt_value       = NULL;
-int token_count          = 0;
+char* prompt_value = NULL;
+int token_count = 0;
 int optional_token_count = 0;
-char** token_values      = NULL;
-char* input_redirect     = NULL;
-char* output_redirect    = NULL;
-int background_active    = 0;
+char** token_values = NULL;
+char* input_redirect = NULL;
+char* output_redirect = NULL;
+int background_active = 0;
 int pipeline_stage_active = 0;
 pid_t background_pids[MAX_TOKEN_COUNT];
 int background_statuses[MAX_TOKEN_COUNT];
 int background_finished[MAX_TOKEN_COUNT];
-int background_count     = 0;
+int background_count = 0;
 
 int debug_level = 0;
 int exit_status = 0;
 int exit_active = 0;
 
 char* working_directory = NULL;
-char* procfs            = NULL;
+char* procfs = NULL;
 
 /* ------------------------------------------------------[ Token initialization ]------------------------------------------------------ */
 
 // Initializes the table of strings that stores tokenized strings.
 void init_tokens()
 {
-    token_values = (char**) malloc(sizeof(char*) * MAX_TOKEN_COUNT);
-    for (int ix = 0; ix < MAX_TOKEN_COUNT; ix++) token_values[ix] = (char*) malloc(sizeof(char) * MAX_TOKEN_SIZE);
+    token_values = (char**)malloc(sizeof(char*) * MAX_TOKEN_COUNT);
+    for (int ix = 0; ix < MAX_TOKEN_COUNT; ix++) token_values[ix] = (char*)malloc(sizeof(char) * MAX_TOKEN_SIZE);
 }
+
 // Deinitializes the table of strings that stores tokenized strings.
 void deinit_tokens()
 {
@@ -62,27 +66,32 @@ void set_success()
     exit_status = 0;
     fflush(stdout);
 }
+
 void set_errno_status(const char* command)
 {
     int err = errno;
     perror(command);
     exit_status = err;
 }
+
 void set_missing_args_status(const char* command, const char* message)
 {
     fprintf(stderr, "%s: %s\n", command, message);
     exit_status = EINVAL;
 }
+
 int get_effective_token_count()
 {
     return token_count - optional_token_count;
 }
+
 int check_args(int required_count, const char* command, const char* message)
 {
     if (get_effective_token_count() >= required_count) return 1;
     set_missing_args_status(command, message);
     return 0;
 }
+
 void print_integer_result(int value)
 {
     printf("%d\n", value);
@@ -175,12 +184,14 @@ void print_builtin_foreground()
     printf("Executing builtin '%s' in foreground\n", token_values[0]);
     fflush(stdout);
 }
+
 void print_builtin_background()
 {
     assert(token_values != NULL);
     printf("Executing builtin '%s' in background\n", token_values[0]);
     fflush(stdout);
 }
+
 void print_builtin_execution()
 {
     if (background_active) print_builtin_background();
@@ -204,10 +215,10 @@ void print_external()
 void set_tokens(const char* str)
 {
     char buffer[MAX_TOKEN_SIZE];
-    int token_ix  = 0;
+    int token_ix = 0;
     int buffer_ix = 0;
-    int str_ix    = 0;
-    int str_len   = strlen(str);
+    int str_ix = 0;
+    int str_len = strlen(str);
     while (str_ix < str_len)
     {
         // Trim leading whitespaces
@@ -286,7 +297,7 @@ typedef struct
 
 void init_redirect_state(RedirectState* state)
 {
-    state->input_fd  = -1;
+    state->input_fd = -1;
     state->output_fd = -1;
 }
 
@@ -457,7 +468,7 @@ void handle_echo_command()
 
 void handle_len_command()
 {
-    int len             = 0;
+    int len = 0;
     int effective_count = get_effective_token_count();
     for (int ix = 1; ix < effective_count; ix++) len += strlen(token_values[ix]);
     print_integer_result(len);
@@ -465,7 +476,7 @@ void handle_len_command()
 
 void handle_sum_command()
 {
-    int sum             = 0;
+    int sum = 0;
     int effective_count = get_effective_token_count();
     for (int ix = 1; ix < effective_count; ix++) sum += atoi(token_values[ix]);
     print_integer_result(sum);
@@ -497,8 +508,8 @@ void handle_calc_command()
     if (!check_args(4, "calc", "Insufficient amount of parameters")) return;
 
     char* operator = token_values[2];
-    int operand1   = atoi(token_values[1]);
-    int operand2   = atoi(token_values[3]);
+    int operand1 = atoi(token_values[1]);
+    int operand2 = atoi(token_values[3]);
     int result;
     int found = 0;
     for (int operator_ix = 0; builtin_operations[operator_ix].name != NULL; operator_ix++)
@@ -508,7 +519,7 @@ void handle_calc_command()
             result = builtin_operations[operator_ix].handler(operand1, operand2);
             printf("%d\n", result);
             exit_status = 0;
-            found       = 1;
+            found = 1;
             break;
         }
     }
@@ -530,7 +541,7 @@ void handle_basename_command()
     }
 
     const char* directory = token_values[1];
-    const char* basename  = strrchr(directory, '/');
+    const char* basename = strrchr(directory, '/');
 
     if (basename == NULL) printf("%s\n", directory);
     else printf("%s\n", basename + 1);
@@ -545,12 +556,12 @@ void handle_dirname_command()
         return;
     }
 
-    const char* directory  = token_values[1];
+    const char* directory = token_values[1];
     const char* last_slash = strrchr(directory, '/');
 
-    if (last_slash == NULL)           { printf(".\n"); }
+    if (last_slash == NULL) { printf(".\n"); }
     else if (last_slash == directory) { printf("/\n"); }
-    else                              { printf("%.*s\n", (int)(last_slash - directory), directory); }
+    else { printf("%.*s\n", (int)(last_slash - directory), directory); }
     set_success();
 }
 
@@ -624,7 +635,7 @@ void handle_dirrm_command()
 void handle_dirls_command()
 {
     const char* directory_ch = get_effective_token_count() > 1 ? token_values[1] : working_directory;
-    DIR* directory_dr        = opendir(directory_ch);
+    DIR* directory_dr = opendir(directory_ch);
     if (directory_dr == NULL)
     {
         set_errno_status("dirls");
@@ -774,7 +785,7 @@ void handle_cpcat_command()
         return;
     }
 
-    int in  = -1;
+    int in = -1;
     int out = -1;
     char buffer[READ_WRITE_BUFFER_SIZE];
     ssize_t bytes_read;
@@ -910,6 +921,7 @@ void handle_proc_command()
 }
 
 int is_digit(char c) { return (c >= '0' && c <= '9'); }
+
 int is_pid_directory(const struct dirent* directory)
 {
     if (directory->d_type != DT_DIR) return 0;
@@ -959,10 +971,10 @@ int get_pinfo(int pid, ProcessInfo* info)
     // `(%4095[^)])` matches strings inside parenthesis.
     // NOTE: The numeric value inside `(%4095[^)])` must equal `MAX_DIRECTORY_LEN - 1`!
     fscanf(stat_file, "%d (%4095[^)]) %c %d",
-        &info->pid,
-        info->name,
-        &info->state,
-        &info->ppid
+           &info->pid,
+           info->name,
+           &info->state,
+           &info->ppid
     );
     fclose(stat_file);
     return 1;
@@ -990,7 +1002,7 @@ void handle_pinfo_command()
                    info.ppid,
                    info.state,
                    info.name
-                   );
+            );
         }
         free(entries[ix]);
     }
@@ -1005,6 +1017,7 @@ int get_child_exit_status(int status)
     if (WIFSIGNALED(status)) return 128 + WTERMSIG(status);
     return 1;
 }
+
 int find_background_child(pid_t pid)
 {
     for (int ix = 0; ix < background_count; ix++)
@@ -1013,25 +1026,28 @@ int find_background_child(pid_t pid)
     }
     return -1;
 }
+
 void remove_background_child(int child_ix)
 {
     for (int ix = child_ix; ix < background_count - 1; ix++)
     {
-        background_pids[ix]     = background_pids[ix + 1];
+        background_pids[ix] = background_pids[ix + 1];
         background_statuses[ix] = background_statuses[ix + 1];
         background_finished[ix] = background_finished[ix + 1];
     }
     background_count--;
 }
+
 void register_background_child(pid_t pid)
 {
     if (background_count >= MAX_TOKEN_COUNT) return;
 
-    background_pids[background_count]     = pid;
+    background_pids[background_count] = pid;
     background_statuses[background_count] = 0;
     background_finished[background_count] = 0;
     background_count++;
 }
+
 void set_background_child_status(pid_t pid, int status)
 {
     int child_ix = find_background_child(pid);
@@ -1040,6 +1056,7 @@ void set_background_child_status(pid_t pid, int status)
     background_statuses[child_ix] = get_child_exit_status(status);
     background_finished[child_ix] = 1;
 }
+
 void cleanup_background_children()
 {
     pid_t pid;
@@ -1159,11 +1176,11 @@ void close_pipeline_pipes(int pipe_fds[][2], int pipe_count)
 
 void reset_command_state()
 {
-    token_count           = 0;
-    optional_token_count  = 0;
-    input_redirect        = NULL;
-    output_redirect       = NULL;
-    background_active     = 0;
+    token_count = 0;
+    optional_token_count = 0;
+    input_redirect = NULL;
+    output_redirect = NULL;
+    background_active = 0;
 }
 
 void execute_command();
@@ -1237,11 +1254,11 @@ void wait_pipeline_children(pid_t* pids, int pid_count)
 void handle_pipes_command()
 {
     int effective_count = get_effective_token_count();
-    int stage_count     = effective_count - 1;
-    int pipe_count      = stage_count - 1;
+    int stage_count = effective_count - 1;
+    int pipe_count = stage_count - 1;
     int pipe_fds[MAX_TOKEN_COUNT][2];
     pid_t pids[MAX_TOKEN_COUNT];
-    int started_count   = 0;
+    int started_count = 0;
 
     if (stage_count < 2)
     {
@@ -1299,6 +1316,302 @@ void handle_pipes_command()
     }
 
     wait_pipeline_children(pids, started_count);
+}
+
+/* --------------------------------------------------------[ Custom functions ]-------------------------------------------------------- */
+
+typedef struct
+{
+    char name[MAX_MARK_NAME_LEN + 1];
+    char directory[MAX_DIRECTORY_LEN + 1];
+} DirectoryMark;
+
+DirectoryMark directory_marks[MAX_MARK_COUNT];
+int directory_mark_count = 0;
+
+char marks_file_path[MAX_DIRECTORY_LEN + 1];
+
+int get_marks_file_path(char* buffer, size_t buffer_size)
+{
+    const char* home = getenv("HOME");
+
+    if (home == NULL || strlen(home) == 0)
+    {
+        snprintf(buffer, buffer_size, "%s", MARKS_FILE_NAME);
+    }
+    else
+    {
+        snprintf(buffer, buffer_size, "%s/%s", home, MARKS_FILE_NAME);
+    }
+
+    return 1;
+}
+
+int is_valid_mark_name(const char* name)
+{
+    if (name == NULL || strlen(name) == 0)
+        return 0;
+
+    if (strlen(name) > MAX_MARK_NAME_LEN)
+        return 0;
+
+    for (const char* ch = name; *ch != '\0'; ch++)
+    {
+        if (isspace(*ch) || *ch == '\t' || *ch == '\n')
+            return 0;
+    }
+
+    return 1;
+}
+
+int find_directory_mark(DirectoryMark* marks, int mark_count, const char* name)
+{
+    for (int ix = 0; ix < mark_count; ix++)
+    {
+        if (strcmp(marks[ix].name, name) == 0)
+            return ix;
+    }
+
+    return -1;
+}
+
+int compare_directory_marks(const void* left, const void* right)
+{
+    const DirectoryMark* left_mark = (const DirectoryMark*)left;
+    const DirectoryMark* right_mark = (const DirectoryMark*)right;
+
+    return strcmp(left_mark->name, right_mark->name);
+}
+
+int load_directory_marks(DirectoryMark* marks, int* mark_count)
+{
+    char marks_file[MAX_DIRECTORY_LEN + 1];
+    get_marks_file_path(marks_file, sizeof(marks_file));
+
+    FILE* file = fopen(marks_file, "r");
+
+    *mark_count = 0;
+
+    if (file == NULL)
+    {
+        if (errno == ENOENT)
+        {
+            return 1;
+        }
+
+        set_errno_status("marks");
+        return 0;
+    }
+
+    char line[MAX_DIRECTORY_LEN + MAX_MARK_NAME_LEN + 4];
+
+    while (fgets(line, sizeof(line), file) != NULL)
+    {
+        if (*mark_count >= MAX_MARK_COUNT)
+            break;
+
+        size_t len = strlen(line);
+
+        if (len > 0 && line[len - 1] == '\n')
+            line[len - 1] = '\0';
+
+        char* separator = strchr(line, '\t');
+
+        if (separator == NULL)
+            continue;
+
+        *separator = '\0';
+
+        const char* name = line;
+        const char* directory = separator + 1;
+
+        if (!is_valid_mark_name(name))
+            continue;
+
+        if (strlen(directory) > MAX_DIRECTORY_LEN)
+            continue;
+
+        strcpy(marks[*mark_count].name, name);
+        strcpy(marks[*mark_count].directory, directory);
+
+        (*mark_count)++;
+    }
+
+    fclose(file);
+
+    qsort(marks, *mark_count, sizeof(DirectoryMark), compare_directory_marks);
+
+    return 1;
+}
+
+int save_directory_marks(DirectoryMark* marks, int mark_count)
+{
+    char marks_file[MAX_DIRECTORY_LEN + 1];
+    get_marks_file_path(marks_file, sizeof(marks_file));
+
+    qsort(marks, mark_count, sizeof(DirectoryMark), compare_directory_marks);
+
+    FILE* file = fopen(marks_file, "w");
+
+    if (file == NULL)
+    {
+        set_errno_status("marks");
+        return 0;
+    }
+
+    for (int ix = 0; ix < mark_count; ix++)
+    {
+        fprintf(file, "%s\t%s\n", marks[ix].name, marks[ix].directory);
+    }
+
+    fclose(file);
+
+    return 1;
+}
+
+void handle_mark_command()
+{
+    int effective_count = get_effective_token_count();
+
+    DirectoryMark marks[MAX_MARK_COUNT];
+    int mark_count = 0;
+
+    if (!load_directory_marks(marks, &mark_count))
+        return;
+
+    if (effective_count == 1)
+    {
+        for (int ix = 0; ix < mark_count; ix++)
+        {
+            printf("%s -> %s\n", marks[ix].name, marks[ix].directory);
+        }
+
+        set_success();
+        return;
+    }
+
+    if (effective_count != 2)
+    {
+        set_missing_args_status("mark", "Usage: mark [NAME]");
+        return;
+    }
+
+    const char* name = token_values[1];
+
+    if (!is_valid_mark_name(name))
+    {
+        fprintf(stderr, "mark: Invalid mark name '%s'\n", name);
+        exit_status = EINVAL;
+        return;
+    }
+
+    char current_directory[MAX_DIRECTORY_LEN + 1];
+
+    if (getcwd(current_directory, sizeof(current_directory)) == NULL)
+    {
+        set_errno_status("mark");
+        return;
+    }
+
+    if (strchr(current_directory, '\t') != NULL ||
+        strchr(current_directory, '\n') != NULL)
+    {
+        fprintf(stderr, "mark: Current directory contains unsupported characters\n");
+        exit_status = EINVAL;
+        return;
+    }
+
+    int mark_ix = find_directory_mark(marks, mark_count, name);
+
+    if (mark_ix < 0)
+    {
+        if (mark_count >= MAX_MARK_COUNT)
+        {
+            fprintf(stderr, "mark: Too many marks\n");
+            exit_status = ENOMEM;
+            return;
+        }
+
+        mark_ix = mark_count++;
+    }
+
+    strcpy(marks[mark_ix].name, name);
+    strcpy(marks[mark_ix].directory, current_directory);
+
+    if (!save_directory_marks(marks, mark_count))
+        return;
+
+    set_success();
+}
+
+void handle_jump_command()
+{
+    if (!check_args(2, "jump", "Missing mark name"))
+        return;
+
+    DirectoryMark marks[MAX_MARK_COUNT];
+    int mark_count = 0;
+
+    if (!load_directory_marks(marks, &mark_count))
+        return;
+
+    const char* name = token_values[1];
+    int mark_ix = find_directory_mark(marks, mark_count, name);
+
+    if (mark_ix < 0)
+    {
+        fprintf(stderr, "jump: Unknown mark '%s'\n", name);
+        exit_status = ENOENT;
+        return;
+    }
+
+    if (chdir(marks[mark_ix].directory) != 0)
+    {
+        set_errno_status("jump");
+        return;
+    }
+
+    if (getcwd(working_directory, MAX_DIRECTORY_LEN + 1) == NULL)
+    {
+        set_errno_status("jump");
+        return;
+    }
+
+    set_success();
+}
+
+void handle_unmark_command()
+{
+    if (!check_args(2, "unmark", "Missing mark name"))
+        return;
+
+    DirectoryMark marks[MAX_MARK_COUNT];
+    int mark_count = 0;
+
+    if (!load_directory_marks(marks, &mark_count))
+        return;
+
+    const char* name = token_values[1];
+    int mark_ix = find_directory_mark(marks, mark_count, name);
+
+    if (mark_ix < 0)
+    {
+        fprintf(stderr, "unmark: Unknown mark '%s'\n", name);
+        exit_status = ENOENT;
+        return;
+    }
+
+    for (int ix = mark_ix; ix < mark_count - 1; ix++)
+    {
+        marks[ix] = marks[ix + 1];
+    }
+
+    mark_count--;
+
+    if (!save_directory_marks(marks, mark_count))
+        return;
+
+    set_success();
 }
 
 /* -----------------------------------------------[ External function command handlers ]----------------------------------------------- */
@@ -1397,6 +1710,9 @@ Command builtin_commands[] = {
     {"waitone", handle_waitone_command},
     {"waitall", handle_waitall_command},
     {"pipes", handle_pipes_command},
+    {"mark", handle_mark_command},
+    {"unmark", handle_unmark_command},
+    {"jump", handle_jump_command},
     {NULL, NULL},
 };
 
@@ -1449,7 +1765,7 @@ void execute_command()
 
 /* --------------------------------------------------------------[ Main ]-------------------------------------------------------------- */
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
     // Set default prompt title
     prompt_value = malloc(sizeof(char) * (MAX_SHELL_NAME_LEN + 1));
@@ -1457,7 +1773,10 @@ int main(int argc, char *argv[])
 
     // Set default working directory
     working_directory = malloc(sizeof(char) * (MAX_DIRECTORY_LEN + 1));
-    strcpy(working_directory, "/");
+    if (getcwd(working_directory, MAX_DIRECTORY_LEN + 1) == NULL)
+    {
+        strcpy(working_directory, "/");
+    }
 
     // Set default process file system directory
     procfs = malloc(sizeof(char) * (MAX_DIRECTORY_LEN + 1));
@@ -1470,11 +1789,11 @@ int main(int argc, char *argv[])
         cleanup_background_children();
 
         // Set default values
-        token_count          = 0;
+        token_count = 0;
         optional_token_count = 0;
-        input_redirect       = NULL;
-        output_redirect      = NULL;
-        background_active    = 0;
+        input_redirect = NULL;
+        output_redirect = NULL;
+        background_active = 0;
 
         if (isatty(STDIN_FILENO))
         {
