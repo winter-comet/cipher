@@ -15,6 +15,7 @@ Cipher is a small Unix-like shell implemented in C. It was developed as a univer
 - File, directory, and link operations
 - Process and user/group information commands
 - Basic `/proc`-based process listing
+- Persistent directory bookmarks through `mark`, `jump`, and `unmark`
 
 ## Build
 
@@ -57,6 +58,14 @@ cpcat <hello.txt >copy.txt
 ```
 
 Input and output redirection work for both external commands and built-in commands. When a built-in command runs in the foreground, the shell temporarily redirects its standard descriptors and restores them after the command finishes. When a built-in command runs in the background, it is executed in a child process.
+
+Input and output redirection files are opened by the shell. Input files are opened read-only. Output files are created if needed, truncated if they already exist, and written with mode `0644`.
+
+Anything after an unquoted `#` is treated as a comment and ignored. Quoted strings wrapped in double quotes are kept as a single argument, which is also how multi-word `pipes` stages are passed to the shell.
+
+The `status` command prints the last command exit status. Built-ins set the status directly, foreground external commands use the child process exit status, external commands that cannot be executed exit with status `127`, and processes terminated by a signal are reported as `128 + signal_number`.
+
+When `debug` is set to a value greater than `0`, Cipher prints diagnostic information while reading and executing commands, including the input line, parsed tokens, detected input/output redirection, background execution, and whether a built-in or external command is being executed.
 
 ## Pipelines
 
@@ -121,6 +130,9 @@ The command above reads from `/etc/passwd`, sends the data through the three pip
 | `dirmk DIR` | Create a directory |
 | `dirrm DIR` | Remove a directory |
 | `dirls [DIR]` | List directory contents |
+| `mark [NAME]` | List saved directory marks, or save/update the current directory under `NAME` |
+| `jump NAME` | Change the working directory to a saved directory mark |
+| `unmark NAME` | Remove a saved directory mark |
 
 ### Files and links
 
@@ -163,6 +175,41 @@ The command above reads from `/etc/passwd`, sends the data through the three pip
 | --- | --- |
 | `pipes STAGE STAGE...` | Execute two or more quoted command stages as a pipeline |
 
+## `cpcat` behavior
+
+The `cpcat` command can display a file, copy a file to another file, or copy data from standard input to standard output.
+
+```text
+cpcat FILE
+cpcat FILE OUT
+cpcat - OUT
+cpcat <input.txt
+cpcat <input.txt >output.txt
+```
+
+When no input file is provided, `cpcat` reads from standard input only when standard input has been redirected or supplied by a pipeline. Passing `-` as the input file also tells `cpcat` to read from standard input. When an output file is provided as a regular argument, `cpcat` creates or truncates that file and writes the copied data to it.
+
+## Directory marks
+
+Directory marks are persistent bookmarks for directories. They are stored in `$HOME/.cipher_marks` when `HOME` is set, or in `.cipher_marks` otherwise.
+
+```text
+mark
+mark NAME
+jump NAME
+unmark NAME
+```
+
+Running `mark` without arguments lists all saved marks in the following format:
+
+```text
+NAME -> /saved/directory
+```
+
+Running `mark NAME` saves the current working directory under `NAME`. If the mark already exists, it is updated to point to the current directory. Mark names must be non-empty, at most 64 characters long, and must not contain whitespace. Cipher stores up to 128 marks and keeps them sorted by name when saving and listing them.
+
+Running `jump NAME` changes the current working directory to the directory saved under `NAME`. Running `unmark NAME` removes the saved mark.
+
 ## Examples
 
 Redirect output from an external command:
@@ -198,4 +245,13 @@ Run a redirected pipeline in the background:
 pipes "rev" "cpcat" "rev" </etc/passwd >text &
 waitall
 cpcat text
+```
+
+Save, use, and remove a directory mark:
+
+```text
+dirch /tmp
+mark tmp
+jump tmp
+unmark tmp
 ```
